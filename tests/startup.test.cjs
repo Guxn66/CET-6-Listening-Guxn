@@ -1,0 +1,1 @@
+const test=require('node:test');const fs=require('node:fs');const path=require('node:path');const vm=require('node:vm');test('all shipped scripts parse before deployment',()=>{for(const f of ['core.js','app.js','startup.js','sw.js','data/catalog.js'])new vm.Script(fs.readFileSync(path.join(__dirname,'../dist',f),'utf8'),{filename:f});});

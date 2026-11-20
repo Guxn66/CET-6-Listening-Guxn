@@ -1,0 +1,11 @@
+#cloud-button{white-space:nowrap}
+#cloud-dialog{max-width:min(33rem,calc(100vw - 2rem))}
+#cloud-panel{padding:1rem 1.25rem 1.25rem}
+#cloud-auth label{display:grid;gap:.35rem;margin:.65rem 0}
+#cloud-auth input{width:100%;padding:.55rem .75rem;border:1px solid var(--line);border-radius:.45rem}
+#cloud-panel [hidden]{display:none!important}
+#cloud-status{min-height:2rem;padding:.6rem .8rem;background:var(--soft,#eef5f3);color:#173e37;border-radius:.5rem}
+.cloud-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.cloud-analysis{margin-block:1rem;padding:1rem 1.25rem}
+.cloud-analysis ul{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;margin-block:.5rem;padding-inline-start:1.25rem}
+@media (max-width:620px){#cloud-button{font-size:.73rem;padding-inline:.35rem}}

@@ -6,3 +6,4 @@ dist/audio/
 dist/data/
 *.log
 coverage/
+audit/

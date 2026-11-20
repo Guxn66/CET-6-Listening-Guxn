@@ -113,11 +113,12 @@ class Store{
   const tx=this.db.transaction('kv','readwrite'),st=tx.objectStore('kv'),read=st.get('state-v2'),savedInk=st.get('ink-ledger-v10');let result;
   savedInk.onsuccess=()=>{let ledger=savedInk.result||{};result=read.result||copy(seed);result.inkNotes=inkApply(result.inkNotes,ledger);
    if(!op){const legacy=st.get('state');legacy.onsuccess=()=>{const h=new Map((result.history||[]).map(h=>[h.id||h.at+':'+h.passageId,h]));for(const item of legacy.result?.history||[])if(!h.has(item.id||item.at+':'+item.passageId))h.set(item.id||item.at+':'+item.passageId,item);result.history=[...h.values()];result.completed=[...new Set([...(result.completed||[]),...(legacy.result?.completed||[]),...result.history.map(h=>h.passageId)])];st.put(result,'state-v2');};return;}
-   const receipt=st.get('applied-v2:'+op.id);receipt.onsuccess=()=>{if(!receipt.result){
-    let changes;if(op.backup){st.put(copy(result),'before-import:'+op.id);const before=result.inkNotes;result=mergeBackup(result,op.backup,op.backupOptions);changes=inkChanges(before,result.inkNotes);}
+   const meta=st.get('cloud-v1');const receipt=st.get('applied-v2:'+op.id);receipt.onsuccess=()=>{if(!receipt.result){
+    const beforeCloud=meta.result&&g.CETCloudCore?g.CETCloudCore.state(result):null; let changes;if(op.backup){st.put(copy(result),'before-import:'+op.id);const before=result.inkNotes;result=mergeBackup(result,op.backup,op.backupOptions);changes=inkChanges(before,result.inkNotes);}
     else {changes=op.delta.ink;result=apply(result,op.delta);}
     if(Object.keys(changes||{}).length){ledger=rememberInk(ledger,changes);st.put(ledger,'ink-ledger-v10');}
     result.inkNotes=inkApply(result.inkNotes,ledger);st.put(result,'state-v2');st.put(true,'applied-v2:'+op.id);
+    if(beforeCloud){const d=g.CETCloudCore.projectedDelta(beforeCloud,g.CETCloudCore.state(result));if(!g.CETCloudCore.empty(d)){meta.result.outbox.push({id:op.id,delta:d});st.put(meta.result,'cloud-v1');}}
    }st.put(result,'state');};};
   tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('学习记录事务未完成'));
  });}
@@ -128,6 +129,47 @@ class Store{
  async importBackup(backup,backupOptions){await this.save();const op={id:crypto.randomUUID(),backup:copy(backup),backupOptions};this.pending++;
   const work=this.chain.then(async()=>{const result=await this.transaction(op,this.seed);this.pending--;if(!this.pending){const d=delta(this.baseline,this.read());this.baseline=copy(result);this.replace(apply(result,d));}this.mirror(result);this.channel?.postMessage({id:op.id});});
   this.chain=work.catch(e=>{this.pending=Math.max(0,this.pending-1);this.error(e);});return work;}
+ cloudTransaction(work){
+  return new Promise((resolve,reject)=>{
+   const tx=this.db.transaction('kv','readwrite'),st=tx.objectStore('kv'),local=st.get('state-v2'),account=st.get('cloud-v1');
+   let output,failure;account.onsuccess=()=>{try{output=work(st,local.result,account.result);}catch(e){failure=e;tx.abort();}};
+   tx.oncomplete=()=>resolve(output);tx.onabort=()=>reject(failure||tx.error||Error('本机同步事务未完成'));
+  });
+ }
+ cloudMeta(){return this.cloudTransaction((_st,_s,meta)=>meta);}
+ async enableCloud(owner){
+  await this.save();
+  const task=this.chain.then(()=>this.cloudTransaction((st,s,meta)=>{
+   if(meta&&meta.owner!==owner)throw Error('此浏览器已绑定另一个账号。请用独立浏览器配置登录其他账号。');
+   if(meta)return;
+   st.put(s,'before-cloud-v1');
+   st.put({owner,revision:-1,outbox:[{id:crypto.randomUUID(),seed:g.CETCloudCore.state(s)}]},'cloud-v1');
+  }));
+  this.chain=task.catch(()=>{});return task;
+ }
+ async acceptCloud(reply){
+  await this.save();this.pending++;
+  const task=this.chain.then(async()=>{
+   let result;
+   try{result=await this.cloudTransaction((st,s,meta)=>{
+    if(!meta||meta.owner!==reply.owner)throw Error('同步账号与本机绑定不匹配。');
+    const ack=new Set(reply.ack);
+    meta.outbox=meta.outbox.filter(o=>!ack.has(o.id));
+    if(reply.document&&reply.revision>=meta.revision){meta.revision=reply.revision;meta.remote=reply.document;}
+    st.put(meta,'cloud-v1');
+    if(!meta.remote)return null;
+    const doc=copy(meta.remote);
+    for(const op of meta.outbox)g.CETCloudCore.apply(doc,op);
+    if(eq(g.CETCloudCore.state(s),doc.state))return null;
+    const merged={...s,...doc.state};
+    st.put(merged,'state-v2');st.put(merged,'state');return merged;
+   });}finally{this.pending--;}
+   if(result&&!this.pending){const d=delta(this.baseline,this.read());this.baseline=copy(result);this.replace(apply(result,d));}
+   if(result){this.mirror(result);this.channel?.postMessage({remote:true});}
+   return !!result;
+  });
+  this.chain=task.catch(()=>{});return task;
+ }
  async refresh(){if(this.pending)return;try{const s=await this.transaction(null,this.seed);if(this.pending)return;const d=delta(this.baseline,this.read());this.baseline=copy(s);this.replace(apply(s,d));}catch(e){this.error(e);}}
 }
 const api={delta,apply,changed,Store,mergeBackup,firstChoices,firstStats,firstSubmissions,submissionSummary,rememberInk,inkApply};if(typeof module!=='undefined')module.exports=api;g.CETProgress=api;
