@@ -1,0 +1,17 @@
+{
+  "name": "CET-6 Listening Lab · 六级听力实验室",
+  "short_name": "Listening Lab",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f7f8f5",
+  "theme_color": "#244c41",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
