@@ -2,7 +2,7 @@
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const {createHash}=require('node:crypto');
-const origin='https://cet6-listening-lab.poeticfern128.chatgpt.site';
+const origin='https://cet6-listening-lab.guxn.chatgpt.site';
 const checks={
  'quality-report.json':'502f25ad88523b69748eaa818c14f47be84dbfdb6b1bb5ac77d34bbd8290ce01',
  'catalog.js':'4ca07bae370baac587ddec4b57616ac170054d449e6a550f309a2d2bca35ff94',

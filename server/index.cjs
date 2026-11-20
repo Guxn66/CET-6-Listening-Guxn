@@ -13,7 +13,7 @@ const cloud=require('../dist/cloud-core.js');
 const rules=require('./validate.cjs');
 const schema=readFileSync(path.join(__dirname,'schema.sql'),'utf8');
 const web=path.join(__dirname,'../dist');
-const upstream='https://cet6-listening-lab.poeticfern128.chatgpt.site';
+const upstream='https://cet6-listening-lab.guxn.chatgpt.site';
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const stretch=promisify(scrypt);
 const days=30*24*60*60;
