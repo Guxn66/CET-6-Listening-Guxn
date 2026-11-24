@@ -38,6 +38,7 @@ function createApp(pool,options={}){
   return ready;
  }
  app.get('/healthz',(_req,res)=>res.json({status:'ok'}));
+ require('./rollcall.cjs').attach(app);
  app.use('/api',(req,res,next)=>{
   res.set('Cache-Control','no-store');
   if(req.method!=='GET'&&req.method!=='HEAD'){
@@ -177,6 +178,7 @@ function poolFromEnv(){
  return new Pool({connectionString:url.toString(),ssl,max:5,idleTimeoutMillis:20_000,connectionTimeoutMillis:8_000,statement_timeout:10_000});
 }
 if(require.main===module){
+ require('./rollcall.cjs').initialize();
  const secure=process.env.NODE_ENV==='production'||!!process.env.ALTARE;
  const rawOrigin=process.env.APP_ORIGIN||process.env.ALTARE_URL||undefined; const origin=rawOrigin?.replace(/\/$/,'');
  if(secure&&origin&&(new URL(origin).origin!==origin||!origin.startsWith('https://')))throw Error('Set APP_ORIGIN to the exact HTTPS origin (no trailing slash).');

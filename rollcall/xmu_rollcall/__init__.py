@@ -1,0 +1,3 @@
+"""XMU Rollcall CLI Package"""
+
+__version__ = "3.5.1.0+local.1"

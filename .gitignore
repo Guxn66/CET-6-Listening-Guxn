@@ -7,3 +7,13 @@ dist/data/
 *.log
 coverage/
 audit/
+
+.rollcall-data/
+__pycache__/
+*.pyc
+rollcall/.python/
+rollcall/.venv/
+rollcall/.cache/
+rollcall/uv*/
+rollcall/*.tar.gz
+*.bak
