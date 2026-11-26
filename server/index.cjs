@@ -186,9 +186,9 @@ if(require.main===module){
  pool?.on('error',e=>console.error('database connection:',e.code||e.name));
  const app=createApp(pool,{secure,origin,registrationCode:process.env.REGISTRATION_CODE});
  const port=Number(process.env.PORT||3000);
- let server,retries=15;
+ let server,retries=60;
  const startServer=()=>{server=app.listen(port,'0.0.0.0',err=>{if(!err){console.log('CET-6 web listening on '+server.address()?.port);return;}if(err.code==='EADDRINUSE'&&retries-->0){console.warn('Port '+port+' busy, retrying...');setTimeout(startServer,1000);return;}console.error(err);process.exit(1);});};
  startServer();
- for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server?.close(()=>Promise.resolve(pool?.end()).finally(()=>process.exit(0))));
+ for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{server?.closeAllConnections?.();server?.close(()=>Promise.resolve(pool?.end()).finally(()=>process.exit(0)));});
 }
 module.exports={createApp};
