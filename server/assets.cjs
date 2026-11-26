@@ -9,7 +9,7 @@ const checks={
  'catalog.json':'6494fce6e83592789031c2afe5c04eb32bbf5431e8d6062ff0f204c1f0f92b7e',
  'answer-review.json':'c20945643e4b18d80637fc72cd613354db4243c639407f9c758e7966b242209a',
  'audio-audit.json':'82fa76fa80a724fb3a21095bcffdf7561260bc2b8ff472b8afa905acd25e4090',
- 'release.json':'944304138adf349fdeb51bbfb339d747e3ed3a25f0eb645817d23d4468fdddb7'
+ 'release.json':'95bd54af75734111cf077b972336bac17e6be7765653daf3f576abbd94a49f82'
 };
 const sha=b=>createHash('sha256').update(b).digest('hex');
 async function main(){
