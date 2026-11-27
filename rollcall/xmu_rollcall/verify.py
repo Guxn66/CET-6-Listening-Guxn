@@ -40,6 +40,14 @@ def _api_headers(in_session=None):
         "Referer": f"{base_url}/",
     }
 
+def _parse_rollcall_date(raw_time):
+    cst = timezone(timedelta(hours=8))
+    dt = datetime.fromisoformat(raw_time)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=cst)
+    return dt.astimezone(cst).date().isoformat()
+
+
 def get_number_rollcall_info(in_session, rollcall_id):
     """Return (code, status, end_time, error) for this rollcall via the timetable API."""
     request_headers = _api_headers(in_session)
@@ -50,11 +58,18 @@ def get_number_rollcall_info(in_session, rollcall_id):
         )
         detail_response.raise_for_status()
         detail = detail_response.json()
-        if not isinstance(detail, dict) or not detail.get("course_id") or not detail.get("rollcall_time"):
+        if isinstance(detail, dict) and isinstance(detail.get("data"), dict):
+            detail = detail["data"]
+        if not isinstance(detail, dict):
+            return None, None, None, "Failed to get rollcall detail from API response."
+        direct_code = detail.get("number_code")
+        if direct_code is None or str(direct_code).strip() == "":
+            direct_code = detail.get("numberCode")
+        if direct_code is not None and str(direct_code).strip() != "":
+            return str(direct_code).strip(), detail.get("status"), detail.get("end_time"), None
+        if not detail.get("course_id") or not detail.get("rollcall_time"):
             return None, None, None, "Failed to get rollcall course or time from API response."
-        rollcall_date = datetime.fromisoformat(detail["rollcall_time"]).astimezone(
-            timezone(timedelta(hours=8))
-        ).date().isoformat()
+        rollcall_date = _parse_rollcall_date(detail["rollcall_time"])
         code_response = in_session.get(
             f"{base_url}/api/timetable_rollcalls",
             params={"course_ids": detail["course_id"], "rollcall_date": rollcall_date},
@@ -67,19 +82,26 @@ def get_number_rollcall_info(in_session, rollcall_id):
     except requests.RequestException as e:
         if is_retryable(e):
             raise
-        return None, None, None, f"Failed to request number code API: {e}"
+        status_code = getattr(getattr(e, "response", None), "status_code", None)
+        suffix = f" (HTTP {status_code})" if status_code else ""
+        return None, None, None, f"Failed to request number code API{suffix}: {e}"
 
     rollcalls = code_data.get("rollcalls") if isinstance(code_data, dict) else None
     if not isinstance(rollcalls, list):
         return None, None, None, "Failed to get rollcalls from timetable API response."
     for rollcall in rollcalls:
-        if not isinstance(rollcall, dict) or str(rollcall.get("id")) != str(rollcall_id):
+        if not isinstance(rollcall, dict):
+            continue
+        rid = rollcall.get("id") if rollcall.get("id") is not None else rollcall.get("rollcall_id")
+        if str(rid) != str(rollcall_id):
             continue
         number_code = rollcall.get("number_code")
+        if number_code is None or str(number_code).strip() == "":
+            number_code = rollcall.get("numberCode")
         status, end_time = rollcall.get("status"), rollcall.get("end_time")
         if number_code is None or str(number_code).strip() == "":
             return None, status, end_time, "Failed to get number code. 'number_code' not found in API response."
-        return str(number_code), status, end_time, None
+        return str(number_code).strip(), status, end_time, None
     return None, None, None, f"Rollcall {rollcall_id} not found in timetable API response."
 
 

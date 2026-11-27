@@ -82,7 +82,10 @@ class AttendanceTests(unittest.TestCase):
         self.assertEqual(session.put.call_count, 1)
         payload = session.put.call_args.kwargs["json"]
         self.assertEqual(payload["accuracy"], 89.5)
-        self.assertEqual(payload["latitude"], position["latitude"])
+        from xmu_rollcall.coord import wgs84_to_gcj02
+        expected_lat, expected_lng = wgs84_to_gcj02(position["latitude"], position["longitude"])
+        self.assertAlmostEqual(payload["latitude"], expected_lat)
+        self.assertAlmostEqual(payload["longitude"], expected_lng)
         session = session_for([task(is_radar=True)], [task(is_radar=True, is_expired=True)])
         with patch.object(attendance, "get_current_location", return_value=position):
             self.assertFalse(attendance.send_radar(session, 42))

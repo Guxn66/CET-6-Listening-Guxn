@@ -23,8 +23,16 @@ from urllib.parse import urlsplit
 import uuid
 
 import requests
-from .attendance import list_rollcalls, answered, send_qr, send_radar, _current_task, _submit
-from .config import CONFIG_DIR, load_config, get_current_account, get_interval
+from .attendance import list_rollcalls, answered, send_qr, send_radar, poll_radar_presets, _current_task, _submit
+from .config import (
+    CONFIG_DIR,
+    load_config,
+    get_current_account,
+    get_interval,
+    get_radar_auto_poll,
+    get_radar_coord_mode,
+    get_radar_presets,
+)
 from .device_input import InputError, parse_qr_text, read_qr_image
 from .utils import load_session, save_session, verify_session
 from .verify import get_number_rollcall_info
@@ -326,8 +334,15 @@ class Resident:
             elif row.get('is_expired') or row.get('status') in {'finished','expired','closed'}:
                 self.store.record(key,course,kind,'expired','签到已结束')
             elif kind != 'number':
+                if kind == 'radar':
+                    cfg = load_config()
+                    presets = get_radar_presets(cfg)
+                    if get_radar_auto_poll(cfg) and presets:
+                        if not old or milliseconds() - old['lastAttempt'] >= 60000:
+                            self.radar_poll(session, key, course, presets, get_radar_coord_mode(cfg))
+                        continue
                 if not old or old['status'] not in {'error','unverified'}:
-                    self.store.record(key,course,kind,'pending','等待当前课堂二维码' if kind == 'qr' else '等待手机实时定位')
+                    self.store.record(key,course,kind,'pending','等待当前课堂二维码' if kind == 'qr' else '等待手机实时定位或选择坐标')
             elif not old or milliseconds()-old['lastAttempt'] >= 60000:
                 try:
                     self.number(session,key,course)
@@ -339,7 +354,9 @@ class Resident:
     def number(self, session, key, course):
         code,status,end,error = get_number_rollcall_info(session,key)
         if error or not code:
-            self.store.record(key,course,'number','error','学校未返回数字码，将持续查询')
+            detail = str(error or 'number_code 为空')[:160]
+            self.store.record(key,course,'number','error',f'学校未返回数字码（{detail}），将持续查询')
+            self.event('数字签到取码失败：%s · %s' % (course[:80], detail), 'warning')
             return
         code = str(code)
         if not re.fullmatch(r'[0-9]{1,20}', code):
@@ -362,6 +379,16 @@ class Resident:
         ok = _submit(session,key,'answer_number_rollcall',{'deviceId':str(uuid.uuid4()),'numberCode':code})
         self.store.record(key,course,'number','confirmed' if ok else 'unverified','' if ok else '提交尚未确认，将回查学校状态')
         self.event('数字签到码：%s · %s · %s' % (code,course[:100],'学校已确认' if ok else '待学校确认'))
+
+    def radar_poll(self, session, key, course, presets, coord_mode='gcj02'):
+        self.store.record(key, course, 'radar', 'unverified', '正在轮询常用教学楼坐标', attempt=True)
+        ok, detail = poll_radar_presets(
+            session, key, presets, coord_mode=coord_mode,
+            should_stop=lambda: not self.enabled.is_set(),
+        )
+        self.store.record(key, course, 'radar', 'confirmed' if ok else 'error', '' if ok else detail)
+        self.event('雷达轮询：%s · %s' % (course[:100], detail))
+        return ok, detail
 
     def execute(self, command):
         key = command['id']
@@ -393,17 +420,23 @@ class Resident:
                         qr = parse_qr_text(qr)
                     if str(qr['rollcallId']) != body['taskId']:
                         raise InputError('二维码不属于选中的签到')
-                elif command['kind'] != 'radar':
+                elif command['kind'] not in {'radar', 'radar_poll'}:
                     raise InputError('指令类型无效')
                 # Login/decoding may take time: enforce expiry and pause again at submission.
                 if command['expiresAt'] <= milliseconds():
                     raise InputError('指令过期，请重新操作')
                 if not self.enabled.is_set():
                     raise InputError('监控已暂停，指令未执行')
-                self.store.record(task['id'],task['course'],task['kind'],'unverified','正在核对提交结果',attempt=True)
-                ok = send_qr(session,qr,expected_rollcall_id=body['taskId']) if command['kind']=='qr' else send_radar(session,body['taskId'],location=body['location'])
-                result = '学校已确认签到' if ok else '学校尚未确认，请检查二维码、定位和官方记录'
-                self.store.record(task['id'],task['course'],task['kind'],'confirmed' if ok else 'error','' if ok else result)
+                if command['kind'] == 'radar_poll':
+                    presets = body.get('presets') or get_radar_presets(load_config())
+                    coord_mode = body.get('coordMode') or get_radar_coord_mode(load_config())
+                    ok, detail = self.radar_poll(session, body['taskId'], task['course'], presets, coord_mode=coord_mode)
+                    result = detail
+                else:
+                    self.store.record(task['id'],task['course'],task['kind'],'unverified','正在核对提交结果',attempt=True)
+                    ok = send_qr(session,qr,expected_rollcall_id=body['taskId']) if command['kind']=='qr' else send_radar(session,body['taskId'],location=body['location'])
+                    result = '学校已确认签到' if ok else '学校尚未确认，请检查二维码、定位和官方记录'
+                    self.store.record(task['id'],task['course'],task['kind'],'confirmed' if ok else 'error','' if ok else result)
                 self.next_poll=0
         except InputError as exc:
             result=str(exc)[:300]

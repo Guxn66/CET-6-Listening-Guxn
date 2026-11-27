@@ -351,3 +351,52 @@ def perform_account_deletion(cookies_to_delete, cookies_to_rename):
                 os.remove(new_path)
             os.rename(old_path, new_path)
 
+
+DEFAULT_RADAR_PRESETS = [
+    {"name": "学武/坤銮·常用点", "latitude": 24.606128, "longitude": 118.312823, "coordType": "gcj02"},
+    {"name": "学武/坤銮·中心", "latitude": 24.6056, "longitude": 118.31335, "coordType": "gcj02"},
+    {"name": "学武/坤銮·东北点", "latitude": 24.60602, "longitude": 118.314, "coordType": "gcj02"},
+    {"name": "学武/坤銮·东南点", "latitude": 24.6051, "longitude": 118.3139, "coordType": "gcj02"},
+    {"name": "学武/坤銮·西南点", "latitude": 24.60518, "longitude": 118.3127, "coordType": "gcj02"},
+    {"name": "文宣楼·中心", "latitude": 24.605253, "longitude": 118.31004, "coordType": "gcj02"},
+    {"name": "文宣楼·北侧点", "latitude": 24.60568, "longitude": 118.30985, "coordType": "gcj02"},
+    {"name": "文宣楼·南侧点", "latitude": 24.60482, "longitude": 118.31023, "coordType": "gcj02"},
+]
+
+
+def get_radar_presets(config):
+    """Return validated preset radar coordinates from config."""
+    raw = config.get("radar_presets")
+    if not isinstance(raw, list):
+        return [item.copy() for item in DEFAULT_RADAR_PRESETS]
+    presets = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        lat, lng = item.get("latitude"), item.get("longitude")
+        if isinstance(lat, bool) or isinstance(lng, bool):
+            continue
+        if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+            continue
+        if not (math.isfinite(lat) and math.isfinite(lng) and -90 <= lat <= 90 and -180 <= lng <= 180):
+            continue
+        coord_type = str(item.get("coordType") or "gcj02").lower()
+        if coord_type not in {"gcj02", "wgs84"}:
+            coord_type = "gcj02"
+        presets.append({
+            "name": str(item.get("name") or f"{lat:.5f},{lng:.5f}")[:60],
+            "latitude": float(lat),
+            "longitude": float(lng),
+            "coordType": coord_type,
+        })
+    return presets
+
+
+def get_radar_auto_poll(config):
+    return config.get("radar_auto_poll", False) is True
+
+
+def get_radar_coord_mode(config):
+    mode = str(config.get("radar_coord_mode") or "gcj02").lower()
+    return mode if mode in {"gcj02", "wgs84", "both"} else "gcj02"
+

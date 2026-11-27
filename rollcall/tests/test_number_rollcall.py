@@ -61,6 +61,22 @@ class NumberRollcallTests(unittest.TestCase):
                 with self.assertRaises(requests.HTTPError):
                     verify.get_number_rollcall_info(session, 446055)
 
+    def test_naive_rollcall_time_uses_campus_timezone_and_supports_rollcall_id_key(self):
+        session = self.session([{"rollcall_id": 520317, "numberCode": "0412"}],
+                               rollcall_time="2026-11-27T08:00:26")
+        self.assertEqual(verify.get_number_rollcall_info(session, 520317)[0], "0412")
+        self.assertEqual(session.get.call_args.kwargs["params"],
+                         {"course_ids": 113897, "rollcall_date": "2026-11-27"})
+
+    def test_direct_number_code_in_rollcall_detail_is_accepted(self):
+        session = Mock()
+        session.headers = {}
+        session.get.side_effect = [
+            response({"data": {"id": 520317, "number_code": "0888", "status": "ongoing"}})
+        ]
+        self.assertEqual(verify.get_number_rollcall_info(session, 520317),
+                         ("0888", "ongoing", None, None))
+
     def test_unauthorized_or_malformed_response_does_not_submit(self):
         for result in (response({}, 401), response({"rollcalls": None})):
             with self.subTest(status=result.status_code), patch.object(verify, "log_and_print"):
